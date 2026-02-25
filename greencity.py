@@ -82,14 +82,21 @@ col3.metric("Recyclable 🟡", recyclable)
 col4.metric("Hazardous 🔴", hazardous)
 
 # =========================
-# Ward Grid (with number of batteries)
+# Ward Grid (with number of batteries, correct count)
 # =========================
 st.subheader("📍 Ward Grid Status")
 if total > 0:
+    # Count status per ward
     ward_summary = df.groupby("Ward_ID")['Status'].value_counts().unstack(fill_value=0)
     ward_summary["Hazard_Percent"] = ward_summary.get("Hazardous",0)/ward_summary.sum(axis=1)*100
-    ward_summary["Battery_Count"] = ward_summary.sum(axis=1)
-    
+
+    # Correct battery count only from status columns
+    status_cols = ["Reusable","Recyclable","Hazardous"]
+    for col in status_cols:
+        if col not in ward_summary.columns:
+            ward_summary[col] = 0
+    ward_summary["Battery_Count"] = ward_summary[status_cols].sum(axis=1)
+
     for zone in zones:
         st.markdown(f"**{zone} Zone**")
         zone_wards = [w for w in ward_ids if w.startswith(zone[:3])]
