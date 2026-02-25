@@ -101,21 +101,23 @@ if total>0:
             )
 
 # =========================
-# Bar Charts for Wards / Zones / City
+# Level selection (Ward / Zone / City) -- applies to both bar and pie charts
 # =========================
-st.subheader("📊 Battery Metrics Overview")
-
-# Level selection
+st.subheader("📊 Battery Metrics Overview & Status Distribution")
 level_choice = st.radio("Select Level", ["Ward","Zone","City"])
-if level_choice=="Ward":
-    selected_ward = st.selectbox("Select Ward", df["Ward_ID"].unique(), key="ward_bar")
-    bar_df = df[df["Ward_ID"]==selected_ward]
-elif level_choice=="Zone":
-    selected_zone = st.selectbox("Select Zone", df["Zone"].unique(), key="zone_bar")
-    bar_df = df[df["Zone"]==selected_zone]
-else:
-    bar_df = df.copy()
 
+if level_choice=="Ward":
+    selected_ward = st.selectbox("Select Ward", df["Ward_ID"].unique(), key="level_select")
+    level_df = df[df["Ward_ID"]==selected_ward]
+elif level_choice=="Zone":
+    selected_zone = st.selectbox("Select Zone", df["Zone"].unique(), key="level_select")
+    level_df = df[df["Zone"]==selected_zone]
+else:
+    level_df = df.copy()
+
+# =========================
+# Bar Charts in One Row
+# =========================
 metrics = ["OCV","Load_Voltage","Temp","Resistance"]
 metric_titles = {
     "OCV":"🔋 Open Circuit Voltage (V)",
@@ -124,10 +126,10 @@ metric_titles = {
     "Resistance":"🛠️ Internal Resistance (Ω)"
 }
 
-for metric in metrics:
-    st.markdown(f"**{metric_titles[metric]}**")
+cols = st.columns(4)
+for i, metric in enumerate(metrics):
     fig = go.Figure()
-    for idx,row in bar_df.iterrows():
+    for idx,row in level_df.iterrows():
         color = {"Reusable":"green","Recyclable":"orange","Hazardous":"red"}[row["Status"]]
         fig.add_trace(go.Bar(
             x=[f"{row['Battery_ID']} ({row['Ward_ID']})"],
@@ -136,39 +138,29 @@ for metric in metrics:
             text=[row[metric]],
             textposition="outside"
         ))
-    # Adjust y-axis for metrics
     if metric in ["OCV","Load_Voltage"]:
         fig.update_yaxes(range=[0,2])
     elif metric=="Temp":
         fig.update_yaxes(range=[0,50])
     elif metric=="Resistance":
         fig.update_yaxes(range=[0,2])
-    fig.update_layout(showlegend=False)
-    st.plotly_chart(fig,use_container_width=True)
+    fig.update_layout(showlegend=False, title=metric_titles[metric])
+    cols[i].plotly_chart(fig,use_container_width=True)
 
 # =========================
-# Pie Chart: Status Distribution
+# Pie Chart for Same Level
 # =========================
-st.subheader("🥧 Battery Status Distribution")
-pie_scope = st.radio("View Pie Chart for:", ["Entire City", "Selected Ward", "Selected Zone"])
+status_counts = level_df['Status'].value_counts().reset_index()
+status_counts.columns = ["Status","Count"]
 
-if pie_scope=="Selected Ward" and total>0:
-    pie_df = df[df["Ward_ID"]==selected_ward]
-elif pie_scope=="Selected Zone" and total>0:
-    pie_df = df[df["Zone"]==selected_zone]
-else:
-    pie_df = df.copy()
-
-if len(pie_df)>0:
-    status_counts = pie_df['Status'].value_counts().reset_index()
-    status_counts.columns = ["Status","Count"]
+if len(status_counts)>0:
     fig_pie = px.pie(
         status_counts,
         names="Status",
         values="Count",
         color="Status",
         color_discrete_map={"Reusable":"green","Recyclable":"orange","Hazardous":"red"},
-        title="Battery Status Breakdown"
+        title="🥧 Battery Status Breakdown"
     )
     fig_pie.update_traces(textinfo='percent+label', pull=[0.05,0.05,0.05])
     st.plotly_chart(fig_pie,use_container_width=True)
