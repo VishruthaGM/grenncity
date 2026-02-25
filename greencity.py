@@ -1,3 +1,8 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
 st.title("🏙️ GreenCity Dashboard (Hierarchical View)")
 
 # Step 1: City (we have only one for now)
