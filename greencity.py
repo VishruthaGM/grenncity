@@ -82,24 +82,36 @@ col3.metric("Recyclable 🟡", recyclable)
 col4.metric("Hazardous 🔴", hazardous)
 
 # =========================
-# Ward Grid
+# Ward Grid (with number of batteries)
 # =========================
 st.subheader("📍 Ward Grid Status")
-if total>0:
+if total > 0:
     ward_summary = df.groupby("Ward_ID")['Status'].value_counts().unstack(fill_value=0)
     ward_summary["Hazard_Percent"] = ward_summary.get("Hazardous",0)/ward_summary.sum(axis=1)*100
+    ward_summary["Battery_Count"] = ward_summary.sum(axis=1)
+    
     for zone in zones:
         st.markdown(f"**{zone} Zone**")
         zone_wards = [w for w in ward_ids if w.startswith(zone[:3])]
         cols = st.columns(len(zone_wards))
-        for i,w in enumerate(zone_wards):
-            hazard_pct = ward_summary.loc[w]["Hazard_Percent"] if w in ward_summary.index else 0
-            color = "green" if hazard_pct<20 else "orange" if hazard_pct<50 else "red"
+        for i, w in enumerate(zone_wards):
+            if w in ward_summary.index:
+                hazard_pct = ward_summary.loc[w]["Hazard_Percent"]
+                battery_count = int(ward_summary.loc[w]["Battery_Count"])
+            else:
+                hazard_pct = 0
+                battery_count = 0
+            
+            color = "green" if hazard_pct < 20 else "orange" if hazard_pct < 50 else "red"
             cols[i].markdown(
-                f"<div style='background-color:{color};padding:20px;border-radius:10px;text-align:center;box-shadow:2px 2px 10px rgba(0,0,0,0.2)'><strong>{w}</strong><br>{hazard_pct:.1f}% Hazard</div>",
+                f"<div style='background-color:{color};padding:20px;border-radius:10px;"
+                f"text-align:center;box-shadow:2px 2px 10px rgba(0,0,0,0.2)'>"
+                f"<strong>{w}</strong><br>"
+                f"{hazard_pct:.1f}% Hazard<br>"
+                f"🔋 {battery_count} Batteries"
+                f"</div>",
                 unsafe_allow_html=True
             )
-
 # =========================
 # Level selection (Ward / Zone / City) -- applies to both bar and pie charts
 # =========================
