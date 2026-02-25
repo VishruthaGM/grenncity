@@ -25,8 +25,6 @@ if "city_data" not in st.session_state:
     ])
 if "battery_count" not in st.session_state:
     st.session_state.battery_count = 0
-if "selection" not in st.session_state:
-    st.session_state.selection = {"level":"City","zone":None,"ward":None}
 
 # =========================
 # Battery Simulation
@@ -63,19 +61,16 @@ if st.button("Add Battery"):
 df = st.session_state.city_data
 
 # =========================
-# Function to show summary + charts
+# Helper Function to Show Metrics & Charts
 # =========================
-def show_metrics_charts(level_df, level_name="City"):
+def show_metrics_charts(level_df, level_name):
     total = len(level_df)
     reusable = len(level_df[level_df['Status']=="Reusable"])
     recyclable = len(level_df[level_df['Status']=="Recyclable"])
     hazardous = len(level_df[level_df['Status']=="Hazardous"])
+    hazard_pct = (hazardous/total*100) if total>0 else 0
 
-    col1,col2,col3,col4 = st.columns(4)
-    col1.metric(f"Total Batteries ({level_name})", total)
-    col2.metric("Reusable 💚", reusable)
-    col3.metric("Recyclable 🟡", recyclable)
-    col4.metric("Hazardous 🔴", hazardous)
+    st.markdown(f"**{level_name}** - 🔴 Hazard: {hazard_pct:.1f}%, 🔋 Batteries: {total}")
 
     # Bar charts
     metrics = ["OCV","Load_Voltage","Temp","Resistance"]
@@ -119,25 +114,23 @@ def show_metrics_charts(level_df, level_name="City"):
         st.plotly_chart(fig_pie,use_container_width=True)
 
 # =========================
-# Hierarchical Navigation
+# Hierarchical View (City → Zones → Wards)
 # =========================
-st.subheader("🏙️ Hierarchical View")
-# City Level
-if st.button("City: GreenCity"):
-    st.session_state.selection = {"level":"City","zone":None,"ward":None}
+st.subheader("🏙️ City View: GreenCity")
+
+# City-level metrics & charts
+with st.expander("City Overview", expanded=True):
     show_metrics_charts(df,"City")
 
-# Zone Level
-for zone in zones:
-    if st.button(f"Zone: {zone}"):
-        st.session_state.selection = {"level":"Zone","zone":zone,"ward":None}
+    # Zones
+    for zone in zones:
         zone_df = df[df["Zone"]==zone]
-        show_metrics_charts(zone_df,f"Zone: {zone}")
+        with st.expander(f"Zone: {zone}"):
+            show_metrics_charts(zone_df,f"Zone: {zone}")
 
-        # Ward Level
-        zone_wards = [w for w in ward_ids if w.startswith(zone[:3])]
-        for ward in zone_wards:
-            if st.button(f"Ward: {ward}"):
-                st.session_state.selection = {"level":"Ward","zone":zone,"ward":ward}
+            # Wards inside Zone
+            zone_wards = [w for w in ward_ids if w.startswith(zone[:3])]
+            for ward in zone_wards:
                 ward_df = df[df["Ward_ID"]==ward]
-                show_metrics_charts(ward_df,f"Ward: {ward}")
+                with st.expander(f"Ward: {ward}"):
+                    show_metrics_charts(ward_df,f"Ward: {ward}")
