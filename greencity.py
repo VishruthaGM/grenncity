@@ -5,10 +5,11 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 # =========================
-# Page setup
+# Page Setup
 # =========================
 st.set_page_config(page_title="💚 GreenCity Dashboard", layout="wide", page_icon="🏙️")
 st.title("🏙️ GreenCity: Mini Smart City E-Waste Dashboard")
+st.markdown("Simulated dashboard for battery health & e-waste in a smart city.")
 
 # =========================
 # Zones & Wards
@@ -53,7 +54,7 @@ def simulate_battery(ward, zone):
             "Status":status}
 
 # =========================
-# Add Battery Button
+# Add Battery
 # =========================
 st.subheader("⚡ Add a Random Battery to a Ward")
 zone_choice = st.selectbox("Select Zone", zones)
@@ -64,7 +65,7 @@ if st.button("Add Battery"):
     st.success(f"✅ {new_bat['Battery_ID']} added to {ward_choice}")
 
 # =========================
-# Display Summary
+# Display Summary Metrics
 # =========================
 df = st.session_state.city_data
 total = len(df)
@@ -92,19 +93,71 @@ if total>0:
         for i,w in enumerate(zone_wards):
             hazard_pct = ward_summary.loc[w]["Hazard_Percent"] if w in ward_summary.index else 0
             color = "green" if hazard_pct<20 else "orange" if hazard_pct<50 else "red"
-            cols[i].markdown(f"<div style='background-color:{color};padding:20px;border-radius:10px;text-align:center'><strong>{w}</strong><br>{hazard_pct:.1f}% Hazard</div>",unsafe_allow_html=True)
+            cols[i].markdown(
+                f"<div style='background-color:{color};padding:20px;border-radius:10px;text-align:center;box-shadow: 2px 2px 10px rgba(0,0,0,0.2)'><strong>{w}</strong><br>{hazard_pct:.1f}% Hazard</div>",
+                unsafe_allow_html=True
+            )
 
 # =========================
-# Ward Bar Chart Example
+# Ward-level Bar Charts
 # =========================
 if total>0:
-    st.subheader("📊 Ward-level OCV Bar Chart")
-    selected_ward = st.selectbox("Select Ward to View OCV", df["Ward_ID"].unique(), key="ward_chart")
+    st.subheader("📊 Ward-level Battery Stats")
+    selected_ward = st.selectbox("Select Ward to View Stats", df["Ward_ID"].unique(), key="ward_charts")
     ward_df = df[df["Ward_ID"]==selected_ward]
-    fig = go.Figure()
-    for idx,row in ward_df.iterrows():
-        color={"Reusable":"green","Recyclable":"orange","Hazardous":"red"}[row["Status"]]
-        fig.add_trace(go.Bar(x=[row["Battery_ID"]],y=[row["OCV"]],
-                             marker_color=color,text=[row["OCV"]],textposition="outside"))
-    fig.update_layout(showlegend=False,yaxis=dict(range=[0,2]))
-    st.plotly_chart(fig,use_container_width=True)
+    
+    metrics = ["OCV", "Load_Voltage", "Temp", "Resistance"]
+    metric_titles = {
+        "OCV":"🔋 Open Circuit Voltage (V)",
+        "Load_Voltage":"⚡ Load Voltage (V)",
+        "Temp":"🌡️ Temperature (°C)",
+        "Resistance":"🛠️ Internal Resistance (Ω)"
+    }
+    
+    for metric in metrics:
+        st.markdown(f"**{metric_titles[metric]}**")
+        fig = go.Figure()
+        for idx,row in ward_df.iterrows():
+            color = {"Reusable":"green","Recyclable":"orange","Hazardous":"red"}[row["Status"]]
+            fig.add_trace(go.Bar(
+                x=[row["Battery_ID"]],
+                y=[row[metric]],
+                marker_color=color,
+                text=[row[metric]],
+                textposition="outside"
+            ))
+        if metric in ["OCV","Load_Voltage"]:
+            fig.update_yaxes(range=[0,2])
+        elif metric=="Temp":
+            fig.update_yaxes(range=[0,50])
+        elif metric=="Resistance":
+            fig.update_yaxes(range=[0,2])
+        fig.update_layout(showlegend=False)
+        st.plotly_chart(fig,use_container_width=True)
+
+# =========================
+# Pie Chart: Battery Status
+# =========================
+st.subheader("🥧 Battery Status Distribution")
+pie_scope = st.radio("View Pie Chart for:", ["Entire City", "Selected Ward"])
+
+if pie_scope == "Selected Ward":
+    pie_df = ward_df.copy()
+else:
+    pie_df = df.copy()
+
+status_counts = pie_df['Status'].value_counts()
+fig_pie = px.pie(
+    names=status_counts.index,
+    values=status_counts.values,
+    color=status_counts.index,
+    color_discrete_map={
+        "Reusable":"green",
+        "Recyclable":"orange",
+        "Hazardous":"red"
+    },
+    title="Battery Status Breakdown",
+    hover_data={'Battery Count':status_counts.values}
+)
+fig_pie.update_traces(textinfo='percent+label', pull=[0.05,0.05,0.05])
+st.plotly_chart(fig_pie,use_container_width=True)
