@@ -1,23 +1,30 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import time
-import plotly.graph_objects as go
 import plotly.express as px
+import plotly.graph_objects as go
+import time
 
 # =========================
 # Page Config
 # =========================
-st.set_page_config(page_title="💚 GreenCell Dashboard", layout="wide", page_icon="💚")
-st.title("💚 GreenCell: Smart Battery Analyzer Dashboard")
+st.set_page_config(page_title="💚 GreenCity Dashboard", layout="wide", page_icon="🏙️")
+st.title("🏙️ GreenCity: Mini Smart City E-Waste Dashboard")
+
+# =========================
+# Setup Zones & Wards
+# =========================
+zones = ["Residential", "Industrial", "Commercial", "Public Services"]
+wards_per_zone = 2
+ward_ids = [f"{zone[:3]}-W{i+1}" for zone in zones for i in range(wards_per_zone)]
 
 # =========================
 # Session State
 # =========================
-if "tested_batteries" not in st.session_state:
-    st.session_state.tested_batteries = pd.DataFrame(columns=[
-        "Battery_ID", "Open_Circuit_Voltage", "Load_Voltage",
-        "Current", "Temperature", "Internal_Resistance", "Status"
+if "city_data" not in st.session_state:
+    st.session_state.city_data = pd.DataFrame(columns=[
+        "Ward_ID", "Zone", "Battery_ID", "OCV", "Load_Voltage",
+        "Current", "Temp", "Resistance", "Status"
     ])
 if "battery_count" not in st.session_state:
     st.session_state.battery_count = 0
@@ -25,63 +32,52 @@ if "battery_count" not in st.session_state:
 # =========================
 # Simulate Battery
 # =========================
-def simulate_battery():
+def simulate_battery(ward, zone):
     st.session_state.battery_count += 1
     battery_id = f"BAT{st.session_state.battery_count}"
-    ocv = np.round(np.random.uniform(1.2, 1.6), 2)
-    lv = np.round(np.random.uniform(1.1, ocv), 2)
-    current = np.round(np.random.uniform(0.05, 0.5), 2)
-    temp = np.round(np.random.uniform(20, 40), 1)
-    resistance = np.round((ocv - lv)/current, 2)
+    ocv = np.round(np.random.uniform(1.2,1.6),2)
+    lv = np.round(np.random.uniform(1.1,ocv),2)
+    current = np.round(np.random.uniform(0.05,0.5),2)
+    temp = np.round(np.random.uniform(20,40),1)
+    resistance = np.round((ocv-lv)/current,2)
     
-    if temp > 40 or resistance > 1.0 or ocv < 1.3:
-        status = "Hazardous"
-    elif resistance <= 0.5 and ocv >= 1.5:
-        status = "Reusable"
+    # Classification
+    if temp>40 or resistance>1.0 or ocv<1.3:
+        status="Hazardous"
+    elif resistance<=0.5 and ocv>=1.5:
+        status="Reusable"
     else:
-        status = "Recyclable"
+        status="Recyclable"
     
-    return {
-        "Battery_ID": battery_id,
-        "Open_Circuit_Voltage": ocv,
-        "Load_Voltage": lv,
-        "Current": current,
-        "Temperature": temp,
-        "Internal_Resistance": resistance,
-        "Status": status
-    }
+    return {"Ward_ID":ward,"Zone":zone,"Battery_ID":battery_id,"OCV":ocv,
+            "Load_Voltage":lv,"Current":current,"Temp":temp,"Resistance":resistance,
+            "Status":status}
 
 # =========================
 # Add Battery Button
 # =========================
-st.subheader("⚡ Process a New Battery")
-if st.button("Add Battery"):
+st.subheader("⚡ Process Random Battery")
+zone_choice = st.selectbox("Select Zone", zones)
+ward_choice = st.selectbox("Select Ward", [f"{zone_choice[:3]}-W{i+1}" for i in range(wards_per_zone)])
+if st.button("Add Battery to Ward"):
     progress = st.progress(0)
-    for i in range(0, 101, 20):
-        time.sleep(0.2)
+    for i in range(0,101,25):
+        time.sleep(0.1)
         progress.progress(i)
-    
-    new_battery = simulate_battery()
-    st.session_state.tested_batteries = pd.concat([
-        st.session_state.tested_batteries,
-        pd.DataFrame([new_battery])
-    ])
-    st.success(f"✅ {new_battery['Battery_ID']} processed!")
+    new_bat = simulate_battery(ward_choice, zone_choice)
+    st.session_state.city_data = pd.concat([st.session_state.city_data,pd.DataFrame([new_bat])])
+    st.success(f"✅ {new_bat['Battery_ID']} added to {ward_choice}")
 
 # =========================
-# Prepare Data
+# Prepare Summary
 # =========================
-df = st.session_state.tested_batteries
+df = st.session_state.city_data
 total = len(df)
+reusable = len(df[df['Status']=="Reusable"])
+recyclable = len(df[df['Status']=="Recyclable"])
+hazardous = len(df[df['Status']=="Hazardous"])
 
-# =========================
-# Summary Cards
-# =========================
-reusable = len(df[df['Status']=="Reusable"]) if total>0 else 0
-recyclable = len(df[df['Status']=="Recyclable"]) if total>0 else 0
-hazardous = len(df[df['Status']=="Hazardous"]) if total>0 else 0
-
-col1, col2, col3, col4 = st.columns(4)
+col1,col2,col3,col4 = st.columns(4)
 col1.metric("Total Batteries", total)
 col2.metric("Reusable 💚", reusable, f"{reusable/total*100:.1f}%" if total>0 else "0%")
 col3.metric("Recyclable 🟡", recyclable, f"{recyclable/total*100:.1f}%" if total>0 else "0%")
@@ -90,76 +86,53 @@ col4.metric("Hazardous 🔴", hazardous, f"{hazardous/total*100:.1f}%" if total>
 st.markdown("---")
 
 # =========================
-# Layout: Bar Graphs + Temperature + Pie Chart
+# Ward Grid Heatmap
 # =========================
-if total > 0:
-    left_col, mid_col, right_col = st.columns([2,2,2])
-    
-    # --- OCV Bar Graph ---
-    with left_col:
-        st.subheader("🔋 Open Circuit Voltage (V)")
-        fig_ocv = go.Figure()
-        for idx, row in df.iterrows():
-            color = {"Reusable":"green","Recyclable":"orange","Hazardous":"red"}[row["Status"]]
-            fig_ocv.add_trace(go.Bar(
-                x=[row["Battery_ID"]],
-                y=[row["Open_Circuit_Voltage"]],
-                marker_color=color,
-                text=[f"{row['Open_Circuit_Voltage']} V"],
-                textposition='outside'
-            ))
-        fig_ocv.update_layout(yaxis=dict(range=[0,2]), showlegend=False)
-        st.plotly_chart(fig_ocv, use_container_width=True)
-    
-    # --- Internal Resistance Graph ---
-    with mid_col:
-        st.subheader("⚡ Internal Resistance (Ω)")
-        fig_res = go.Figure()
-        for idx, row in df.iterrows():
-            color = {"Reusable":"green","Recyclable":"orange","Hazardous":"red"}[row["Status"]]
-            fig_res.add_trace(go.Bar(
-                x=[row["Battery_ID"]],
-                y=[row["Internal_Resistance"]],
-                marker_color=color,
-                text=[f"{row['Internal_Resistance']} Ω"],
-                textposition='outside'
-            ))
-        fig_res.update_layout(yaxis=dict(range=[0,2]), showlegend=False)
-        st.plotly_chart(fig_res, use_container_width=True)
-    
-    # --- Temperature Graph ---
-    with right_col:
-        st.subheader("🌡️ Temperature (°C)")
-        fig_temp = go.Figure()
-        for idx, row in df.iterrows():
-            color = {"Reusable":"green","Recyclable":"orange","Hazardous":"red"}[row["Status"]]
-            fig_temp.add_trace(go.Bar(
-                x=[row["Battery_ID"]],
-                y=[row["Temperature"]],
-                marker_color=color,
-                text=[f"{row['Temperature']} °C"],
-                textposition='outside'
-            ))
-        fig_temp.update_layout(yaxis=dict(range=[0,50]), showlegend=False)
-        st.plotly_chart(fig_temp, use_container_width=True)
-    
-    # --- Pie Chart (Below) ---
-    st.subheader("📊 Battery Status Distribution")
-    status_counts = df['Status'].value_counts().reindex(['Reusable','Recyclable','Hazardous'], fill_value=0)
-    fig_pie = px.pie(
-        names=status_counts.index,
-        values=status_counts.values,
-        color=status_counts.index,
-        color_discrete_map={"Reusable":"green","Recyclable":"orange","Hazardous":"red"},
-        title="Status Distribution"
-    )
-    st.plotly_chart(fig_pie, use_container_width=True)
+st.subheader("📍 City Ward Status Grid")
+if total>0:
+    ward_summary = df.groupby("Ward_ID")['Status'].value_counts().unstack(fill_value=0)
+    ward_summary["Hazard_Percent"] = ward_summary.get("Hazardous",0)/ward_summary.sum(axis=1)*100
+    # Grid display: color-coded hazard %
+    for zone in zones:
+        st.markdown(f"**{zone} Zone**")
+        zone_wards = [w for w in ward_ids if w.startswith(zone[:3])]
+        cols = st.columns(len(zone_wards))
+        for i,w in enumerate(zone_wards):
+            hazard_pct = ward_summary.loc[w]["Hazard_Percent"] if w in ward_summary.index else 0
+            color = "green" if hazard_pct<20 else "orange" if hazard_pct<50 else "red"
+            cols[i].markdown(f"<div style='background-color:{color};padding:20px;border-radius:10px;text-align:center'><strong>{w}</strong><br>{hazard_pct:.1f}% Hazard</div>",unsafe_allow_html=True)
 
 # =========================
-# Battery Details Table
+# Ward-level Graphs
 # =========================
-if total > 0:
-    st.subheader("📝 Battery Details")
+st.subheader("📊 Ward-level Battery Stats")
+if total>0:
+    selected_ward = st.selectbox("Select Ward to View Stats", df["Ward_ID"].unique())
+    ward_df = df[df["Ward_ID"]==selected_ward]
+    
+    # OCV Bar Graph
+    st.markdown("**🔋 Open Circuit Voltage (V)**")
+    fig_ocv = go.Figure()
+    for idx,row in ward_df.iterrows():
+        color={"Reusable":"green","Recyclable":"orange","Hazardous":"red"}[row["Status"]]
+        fig_ocv.add_trace(go.Bar(x=[row["Battery_ID"]],y=[row["OCV"]],
+                                 marker_color=color,text=[row["OCV"]],textposition="outside"))
+    fig_ocv.update_layout(showlegend=False,yaxis=dict(range=[0,2]))
+    st.plotly_chart(fig_ocv,use_container_width=True)
+    
+    # Pie Chart
+    st.markdown("**📊 Status Distribution**")
+    ward_counts = ward_df['Status'].value_counts().reindex(['Reusable','Recyclable','Hazardous'],fill_value=0)
+    fig_pie = px.pie(names=ward_counts.index, values=ward_counts.values,
+                     color=ward_counts.index,
+                     color_discrete_map={"Reusable":"green","Recyclable":"orange","Hazardous":"red"})
+    st.plotly_chart(fig_pie,use_container_width=True)
+
+# =========================
+# Ward Table
+# =========================
+if total>0:
+    st.subheader("📝 Ward Battery Details")
     icon_map = {"Reusable":"💚","Recyclable":"🟡","Hazardous":"🔴"}
     display_df = df.copy()
     display_df["Status"] = display_df["Status"].map(lambda x: f"{icon_map[x]} {x}")
@@ -168,5 +141,5 @@ if total > 0:
 # =========================
 # Hazard Alert
 # =========================
-if hazardous > 0:
-    st.warning(f"⚠️ {hazardous} hazardous batteries detected! Handle with care!")
+if hazardous>0:
+    st.warning(f"⚠️ {hazardous} hazardous batteries detected city-wide! Handle with care!")
